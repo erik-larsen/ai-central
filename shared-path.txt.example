@@ -1,8 +1,0 @@
-# Central shared folder, per OS. Used by sync-ai-central.sh / .ps1.
-# Copy this file to shared-path.txt (same directory as the scripts) and
-# fill in your own paths. shared-path.txt is gitignored.
-mac: /path/to/ai-central
-windows: \\server\share\path\to\ai-central
-# Optional: name of this machine's archive folder under machines/
-# (default: the Mac's LocalHostName / Windows COMPUTERNAME).
-# machine: my-laptop

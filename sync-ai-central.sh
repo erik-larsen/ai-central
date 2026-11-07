@@ -2,13 +2,12 @@
 # sync-ai-central.sh — archive this Mac's Claude Code sessions to a central
 # shared folder, and share them with other machines through it.
 #
-#   ./sync-ai-central.sh            # archive: this machine's sessions -> central shared folder (default)
-#   ./sync-ai-central.sh restore    # restore: merged sessions central shared folder -> this machine
+#   ./sync-ai-central.sh archive /path/to/ai-central   # this machine's sessions -> central shared folder
+#   ./sync-ai-central.sh restore /path/to/ai-central   # merged sessions central shared folder -> this machine
 #
-# The central shared folder comes from shared-path.txt next to this script (the "mac:"
-# line). Override with:  AI_CENTRAL=/path/to/central ./sync-ai-central.sh
-# An optional "machine:" line names this machine's archive folder (default: the
-# Mac's LocalHostName).
+# Options:
+#   --machine NAME   name of this machine's archive folder under machines/
+#                    (default: the Mac's LocalHostName)
 #
 # The central shared folder has two parts:
 #
@@ -17,8 +16,8 @@
 #            every machine. archive writes these; restore copies them back.
 #   archive  machines/<name>/ — everything else worth keeping from this machine
 #            (per-machine index state, file history, plans, tasks, side-session
-#            notes, Cowork sessions, CLAUDE.md, ...). Written by archive; never restored,
-#            since one machine's copy would overwrite the other's.
+#            notes, Cowork sessions, CLAUDE.md, ...). Written by archive; never
+#            restored, since one machine's copy would overwrite the other's.
 #
 # Credentials and keys never leave this machine. Copies are additive and
 # newest-wins (-u): nothing is ever deleted from either side. When an archive
@@ -27,51 +26,34 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PATHS_FILE="$SCRIPT_DIR/shared-path.txt"
-
-# value of a "key:" line in shared-path.txt; tolerates Windows line endings
-read_key() {
-    [ -f "$PATHS_FILE" ] || return 0
-    tr -d '\r' < "$PATHS_FILE" | sed -n "s/^[[:space:]]*$1:[[:space:]]*//p" | head -1
+usage() {
+    echo "usage: $0 archive|restore <central shared folder> [--machine NAME]" >&2
+    exit 2
 }
 
-if [ -n "${AI_CENTRAL:-}" ]; then
-    CENTRAL="$AI_CENTRAL"
-else
-    if [ ! -f "$PATHS_FILE" ]; then
-        cat >&2 <<'EOF'
-shared-path.txt not found next to this script — nothing synced.
-Copy shared-path.txt.example to shared-path.txt and fill in the central shared
-folder for each OS, e.g.:
-
-  mac: /path/to/ai-central
-  windows: \\server\share\path\to\ai-central
-EOF
-        exit 1
-    fi
-    CENTRAL="$(read_key mac)"
-    if [ -z "$CENTRAL" ]; then
-        echo "error: no 'mac:' line found in $PATHS_FILE — nothing synced." >&2
-        exit 1
-    fi
-fi
-
-MODE="${1:-archive}"
+MODE="" CENTRAL="" MACHINE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --machine) [ $# -ge 2 ] || usage; MACHINE="$2"; shift 2 ;;
+        -*) usage ;;
+        *)
+            if [ -z "$MODE" ]; then MODE="$1"
+            elif [ -z "$CENTRAL" ]; then CENTRAL="${1%/}"
+            else usage
+            fi
+            shift ;;
+    esac
+done
+if [ "$MODE" != "archive" ] && [ "$MODE" != "restore" ]; then usage; fi
+[ -n "$CENTRAL" ] || usage
 
 CLAUDE_HOME="$HOME/.claude"
 APP_DATA="$HOME/Library/Application Support/Claude"
 PROJECTS="$CLAUDE_HOME/projects"
 SESSIONS="$APP_DATA/claude-code-sessions"
-MACHINE="$(read_key machine)"
 [ -n "$MACHINE" ] || MACHINE="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
 ARCHIVE="$CENTRAL/machines/$MACHINE"
 VERSIONS="$ARCHIVE/versions/$(date +%Y-%m-%d_%H%M%S)"
-
-if [ "$MODE" != "archive" ] && [ "$MODE" != "restore" ]; then
-    echo "usage: $0 [archive|restore]" >&2
-    exit 2
-fi
 
 # rsync filters (first match wins). Archive runs also pass --backup-dir, which
 # keeps the copy they replace under versions/<timestamp>/<tree>.

@@ -1,13 +1,12 @@
 # sync-ai-central.ps1 -- archive this PC's Claude Code sessions to a central
 # shared folder, and share them with other machines through it.
 #
-#   .\sync-ai-central.ps1              # archive: this machine's sessions -> central shared folder (default)
-#   .\sync-ai-central.ps1 restore      # restore: merged sessions central shared folder -> this machine
-#   .\sync-ai-central.ps1 archive -Central \\server\share\path\to\ai-central
+#   .\sync-ai-central.ps1 archive \\server\share\path\to\ai-central   # this machine's sessions -> central shared folder
+#   .\sync-ai-central.ps1 restore \\server\share\path\to\ai-central   # merged sessions central shared folder -> this machine
 #
-# The central shared folder comes from shared-path.txt next to this script (the
-# "windows:" line); the -Central parameter overrides it. An optional "machine:"
-# line names this machine's archive folder (default: COMPUTERNAME).
+# Options:
+#   -Machine NAME   name of this machine's archive folder under machines\
+#                   (default: COMPUTERNAME)
 #
 # The central shared folder has two parts:
 #
@@ -16,8 +15,8 @@
 #            every machine. archive writes these; restore copies them back.
 #   archive  machines\<name>\ -- everything else worth keeping from this machine
 #            (per-machine index state, file history, plans, tasks, side-session
-#            notes, Cowork sessions, CLAUDE.md, ...). Written by archive; never restored,
-#            since one machine's copy would overwrite the other's.
+#            notes, Cowork sessions, CLAUDE.md, ...). Written by archive; never
+#            restored, since one machine's copy would overwrite the other's.
 #
 # Credentials and keys never leave this machine. Copies are additive and
 # newest-wins (/XO): nothing is ever deleted from either side. When an archive
@@ -25,42 +24,17 @@
 # machines\<name>\versions\<timestamp>\ (transcripts excepted: they only grow).
 
 param(
+    [Parameter(Mandatory, Position = 0)]
     [ValidateSet('archive', 'restore')]
-    [string]$Mode = 'archive',
-    [string]$Central
+    [string]$Mode,
+    [Parameter(Mandatory, Position = 1)]
+    [string]$Central,
+    [string]$Machine = $env:COMPUTERNAME
 )
 
 $ErrorActionPreference = 'Stop'
 
-$pathsFile = Join-Path $PSScriptRoot 'shared-path.txt'
-
-# value of a "key:" line in shared-path.txt, or $null
-function Read-Key($key) {
-    if (-not (Test-Path $pathsFile)) { return $null }
-    $line = Get-Content $pathsFile | Where-Object { $_ -match "^\s*${key}:" } | Select-Object -First 1
-    if (-not $line) { return $null }
-    return ($line -replace "^\s*${key}:\s*", '').Trim()
-}
-
-if (-not $Central) {
-    if (-not (Test-Path $pathsFile)) {
-        Write-Host 'shared-path.txt not found next to this script - nothing synced.'
-        Write-Host 'Copy shared-path.txt.example to shared-path.txt and fill in the central shared'
-        Write-Host 'folder for each OS, e.g.:'
-        Write-Host ''
-        Write-Host '  mac: /path/to/ai-central'
-        Write-Host '  windows: \\server\share\path\to\ai-central'
-        exit 1
-    }
-    $Central = Read-Key 'windows'
-    if (-not $Central) {
-        Write-Host "error: no 'windows:' line found in $pathsFile - nothing synced."
-        exit 1
-    }
-}
-
-$machine = Read-Key 'machine'
-if (-not $machine) { $machine = $env:COMPUTERNAME }
+$Central = $Central.TrimEnd('\', '/')
 
 $claudeHome = Join-Path $env:USERPROFILE '.claude'
 $appData = Join-Path $env:APPDATA 'Claude'

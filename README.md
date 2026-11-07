@@ -32,7 +32,7 @@ ai-central/
     └── versions/<timestamp>/  #   old copies of files an archive run replaced
 ```
 
-`<name>` is the Mac's LocalHostName or the Windows `COMPUTERNAME`, unless `shared-path.txt` sets `machine:`. Set it if you might rename a machine, since a new name starts a new archive folder.
+`<name>` is the Mac's LocalHostName or the Windows `COMPUTERNAME`, unless you pass `--machine NAME` (Mac) / `-Machine NAME` (Windows). Pass it if you might rename a machine, since a new name starts a new archive folder.
 
 | What | Where it lives locally | Goes to | Notes |
 |---|---|---|---|
@@ -59,21 +59,23 @@ The archive can still hold secrets that ended up in files: an API key in `settin
 
 ## Sync scripts
 
-The scripts read the central shared folder's location from `shared-path.txt` next to them (gitignored — copy `shared-path.txt.example` and fill in your paths).
+Both scripts take the mode and the central shared folder as arguments; nothing about your setup is stored in the repo.
 
 Mac:
 
 ```bash
-./sync-ai-central.sh            # archive this machine's sessions (default)
-./sync-ai-central.sh restore    # restore merged sessions to this machine (quit Claude app first)
+./sync-ai-central.sh archive /path/to/ai-central    # archive this machine's sessions
+./sync-ai-central.sh restore /path/to/ai-central    # restore merged sessions to this machine (quit Claude app first)
 ```
 
 Windows (PowerShell):
 
 ```powershell
-.\sync-ai-central.ps1            # archive this machine's sessions (default)
-.\sync-ai-central.ps1 restore    # restore merged sessions to this machine (quit Claude app first)
+.\sync-ai-central.ps1 archive \\server\share\path\to\ai-central    # archive this machine's sessions
+.\sync-ai-central.ps1 restore \\server\share\path\to\ai-central    # restore merged sessions to this machine (quit Claude app first)
 ```
+
+On the Mac, a central shared folder under `/Volumes/` must be mounted first; the script refuses to write to an unmounted path rather than filling the local disk.
 
 `archive` copies this machine's sessions into the merged part and everything else into its own archive folder. `restore` copies the merged part back onto this machine, which is also how sessions from other machines show up in the app; archive folders are never restored automatically. Run `archive` on a machine after working there; run `restore` (with the app fully quit, including the tray icon on Windows) before working somewhere else.
 

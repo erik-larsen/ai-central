@@ -1,3 +1,0 @@
-# Machine-specific config with private paths.
-# Copy shared-path.txt.example to shared-path.txt and fill in locally.
-shared-path.txt
