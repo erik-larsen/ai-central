@@ -2,8 +2,8 @@
 # sync-ai-central.sh — archive this Mac's Claude Code sessions to a central
 # shared folder, and share them with other machines through it.
 #
-#   ./sync-ai-central.sh          # push: archive + share local sessions -> central shared folder (default)
-#   ./sync-ai-central.sh pull     # pull: copy merged sessions central -> local
+#   ./sync-ai-central.sh            # archive: this machine's sessions -> central shared folder (default)
+#   ./sync-ai-central.sh restore    # restore: merged sessions central shared folder -> this machine
 #
 # The central shared folder comes from shared-path.txt next to this script (the "mac:"
 # line). Override with:  AI_CENTRAL=/path/to/central ./sync-ai-central.sh
@@ -14,15 +14,15 @@
 #
 #   merged   projects/ (transcripts) and claude-code-sessions/ (only the
 #            local_*.json index entries and deleted_* tombstones), merged from
-#            every machine. push and pull both sync these.
+#            every machine. archive writes these; restore copies them back.
 #   archive  machines/<name>/ — everything else worth keeping from this machine
 #            (per-machine index state, file history, plans, tasks, side-session
-#            notes, Cowork sessions, CLAUDE.md, ...). push only; never pulled,
+#            notes, Cowork sessions, CLAUDE.md, ...). Written by archive; never restored,
 #            since one machine's copy would overwrite the other's.
 #
 # Credentials and keys never leave this machine. Copies are additive and
-# newest-wins (-u): nothing is ever deleted from either side. When a push
-# replaces a file in the central shared folder, the old copy is kept under
+# newest-wins (-u): nothing is ever deleted from either side. When an archive
+# run replaces a file in the central shared folder, the old copy is kept under
 # machines/<name>/versions/<timestamp>/ (transcripts excepted: they only grow).
 
 set -euo pipefail
@@ -57,7 +57,7 @@ EOF
     fi
 fi
 
-MODE="${1:-push}"
+MODE="${1:-archive}"
 
 CLAUDE_HOME="$HOME/.claude"
 APP_DATA="$HOME/Library/Application Support/Claude"
@@ -68,15 +68,16 @@ MACHINE="$(read_key machine)"
 ARCHIVE="$CENTRAL/machines/$MACHINE"
 VERSIONS="$ARCHIVE/versions/$(date +%Y-%m-%d_%H%M%S)"
 
-if [ "$MODE" != "push" ] && [ "$MODE" != "pull" ]; then
-    echo "usage: $0 [push|pull]" >&2
+if [ "$MODE" != "archive" ] && [ "$MODE" != "restore" ]; then
+    echo "usage: $0 [archive|restore]" >&2
     exit 2
 fi
 
-# rsync filters (first match wins). Pushes also pass --backup-dir, which keeps
-# the copy a push replaces under versions/<timestamp>/<tree>. The index tree splits in two: entries and
-# tombstones are merged; everything else in it (backlog/, waiting-input/,
-# archived-sessions.idx, scheduled-tasks.json, ...) is per-machine state.
+# rsync filters (first match wins). Archive runs also pass --backup-dir, which
+# keeps the copy they replace under versions/<timestamp>/<tree>.
+# The index tree splits in two: entries and tombstones are merged; everything
+# else in it (backlog/, waiting-input/, archived-sessions.idx,
+# scheduled-tasks.json, ...) is per-machine state.
 INDEX_MERGED=(--include '*/' --include 'local_*.json' --include 'deleted_*' --exclude '*' --prune-empty-dirs)
 INDEX_LOCAL=(--exclude 'local_*.json' --exclude 'deleted_*' --prune-empty-dirs)
 # never archived, wherever they turn up (Cowork sessions carry their own .claude/)
@@ -142,13 +143,13 @@ sync_tree() {
     fi
 }
 
-if [ "$MODE" = "push" ]; then
-    echo "Pushing local sessions -> $CENTRAL"
+if [ "$MODE" = "archive" ]; then
+    echo "Archiving merged sessions -> $CENTRAL"
     sync_tree "transcripts (.claude/projects)" "$PROJECTS" "$CENTRAL/projects"
     sync_tree "session index (claude-code-sessions)" "$SESSIONS" "$CENTRAL/claude-code-sessions" \
         --backup "--backup-dir=$VERSIONS/claude-code-sessions" "${INDEX_MERGED[@]}"
     echo ""
-    echo "Archiving this machine -> $ARCHIVE"
+    echo "Archiving this machine's own data -> $ARCHIVE"
     sync_tree "per-machine index state" "$SESSIONS" "$ARCHIVE/claude-code-sessions" \
         --backup "--backup-dir=$VERSIONS/machine-claude-code-sessions" "${INDEX_LOCAL[@]}"
     sync_tree "~/.claude (file history, plans, tasks, instructions)" "$CLAUDE_HOME" "$ARCHIVE/dot-claude" \
@@ -160,7 +161,7 @@ if [ "$MODE" = "push" ]; then
         echo "Replaced files kept in $VERSIONS"
     fi
 else
-    echo "Pulling $CENTRAL -> local sessions"
+    echo "Restoring merged sessions $CENTRAL -> this machine"
     echo "(quit the Claude app first if it's running — it caches the session list)"
     sync_tree "transcripts (.claude/projects)" "$CENTRAL/projects" "$PROJECTS"
     sync_tree "session index (claude-code-sessions)" "$CENTRAL/claude-code-sessions" "$SESSIONS" "${INDEX_MERGED[@]}"

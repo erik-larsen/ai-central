@@ -25,11 +25,11 @@ Sharing assumes every machine signs in to the same Claude account: the app lists
 ai-central/
 ├── projects/                  # merged: transcripts from all machines
 ├── claude-code-sessions/      # merged: index entries and tombstones from all machines
-└── machines/<name>/           # archive: one folder per machine, push only
+└── machines/<name>/           # archive: one folder per machine, never restored
     ├── claude-code-sessions/  #   per-machine files from the index folder
     ├── dot-claude/            #   from ~/.claude
     ├── app-data/              #   from the app data folder
-    └── versions/<timestamp>/  #   old copies of files a push replaced
+    └── versions/<timestamp>/  #   old copies of files an archive run replaced
 ```
 
 `<name>` is the Mac's LocalHostName or the Windows `COMPUTERNAME`, unless `shared-path.txt` sets `machine:`. Set it if you might rename a machine, since a new name starts a new archive folder.
@@ -64,32 +64,32 @@ The scripts read the central shared folder's location from `shared-path.txt` nex
 Mac:
 
 ```bash
-./sync-ai-central.sh          # push: archive + share this machine's sessions (default)
-./sync-ai-central.sh pull     # pull: merged sessions central -> local (quit Claude app first)
+./sync-ai-central.sh            # archive this machine's sessions (default)
+./sync-ai-central.sh restore    # restore merged sessions to this machine (quit Claude app first)
 ```
 
 Windows (PowerShell):
 
 ```powershell
-.\sync-ai-central.ps1          # push: archive + share this machine's sessions (default)
-.\sync-ai-central.ps1 pull     # pull: merged sessions central -> local (quit Claude app first)
+.\sync-ai-central.ps1            # archive this machine's sessions (default)
+.\sync-ai-central.ps1 restore    # restore merged sessions to this machine (quit Claude app first)
 ```
 
-`push` copies the merged part and this machine's archive folder. `pull` brings back only the merged part; archive folders are never pulled. Run `push` on a machine after working there; run `pull` (with the app fully quit, including the tray icon on Windows) before working somewhere else.
+`archive` copies this machine's sessions into the merged part and everything else into its own archive folder. `restore` copies the merged part back onto this machine, which is also how sessions from other machines show up in the app; archive folders are never restored automatically. Run `archive` on a machine after working there; run `restore` (with the app fully quit, including the tray icon on Windows) before working somewhere else.
 
-Both are additive and newest-wins: nothing is ever deleted from either side. When a push replaces a file in the central shared folder, the old copy moves to `machines/<name>/versions/<timestamp>/`, so earlier versions of your backlog, `CLAUDE.md`, index entries and so on survive. Transcripts are the exception: they are append-only, so the newer copy already contains the older one.
+Both are additive and newest-wins: nothing is ever deleted from either side. When an archive run replaces a file in the central shared folder, the old copy moves to `machines/<name>/versions/<timestamp>/`, so earlier versions of your backlog, `CLAUDE.md`, index entries and so on survive. Transcripts are the exception: they are append-only, so the newer copy already contains the older one.
 
 If any copy fails, the script stops with an error instead of carrying on.
 
 **Cross-machine resume:** every session appears in the list on every machine, but *continuing* one only fully works if its project folder exists at the same absolute path on that machine. A session started in `<your-home>/code/foo` on one machine expects that exact path on the other, and Mac and Windows paths never match. Sessions run in a worktree (`<repo>/.claude/worktrees/<name>`) reference that worktree's path, which is local and usually short-lived, so on the other machine they are effectively read-only. Reading is fine regardless.
 
-**Cleanup pruning:** set `"cleanupPeriodDays": 9999` in `~/.claude/settings.json` / `%USERPROFILE%\.claude\settings.json` on every machine, or startup cleanup deletes old local session data. The central shared folder keeps its copy either way, but a `pull` would then bring old sessions straight back.
+**Cleanup pruning:** set `"cleanupPeriodDays": 9999` in `~/.claude/settings.json` / `%USERPROFILE%\.claude\settings.json` on every machine, or startup cleanup deletes old local session data. The central shared folder keeps its copy either way, but a `restore` would then bring old sessions straight back.
 
 ## Restoring
 
 Everything in the central shared folder is plain files, so restoring is copying them back with the Claude app quit.
 
-- **Sessions:** `pull` on any machine restores every merged transcript and index entry.
-- **A machine's archive:** copy what you need from `machines/<name>/` back to the same place: `dot-claude/` into `~/.claude/`, `app-data/` into the app data folder, `claude-code-sessions/` into the app data folder's `claude-code-sessions/`. Copy into a fresh install, or one file at a time; don't overwrite a working machine's newer files wholesale.
+- **Sessions:** `restore` on any machine brings back every merged transcript and index entry.
+- **A machine's archive:** `restore` doesn't touch it, so copy what you need from `machines/<name>/` back to the same place: `dot-claude/` into `~/.claude/`, `app-data/` into the app data folder, `claude-code-sessions/` into the app data folder's `claude-code-sessions/`. Copy into a fresh install, or one file at a time; don't overwrite a working machine's newer files wholesale.
 - **An older version of a file:** look in `machines/<name>/versions/<timestamp>/`, which mirrors the tree it came from.
 - **Without the app:** transcripts are JSONL, one JSON object per line, so any text editor or `jq` can read them.

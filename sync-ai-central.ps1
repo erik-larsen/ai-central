@@ -1,9 +1,9 @@
 # sync-ai-central.ps1 -- archive this PC's Claude Code sessions to a central
 # shared folder, and share them with other machines through it.
 #
-#   .\sync-ai-central.ps1              # push: archive + share local sessions -> central shared folder (default)
-#   .\sync-ai-central.ps1 pull         # pull: copy merged sessions central -> local
-#   .\sync-ai-central.ps1 push -Central \\server\share\path\to\ai-central
+#   .\sync-ai-central.ps1              # archive: this machine's sessions -> central shared folder (default)
+#   .\sync-ai-central.ps1 restore      # restore: merged sessions central shared folder -> this machine
+#   .\sync-ai-central.ps1 archive -Central \\server\share\path\to\ai-central
 #
 # The central shared folder comes from shared-path.txt next to this script (the
 # "windows:" line); the -Central parameter overrides it. An optional "machine:"
@@ -13,20 +13,20 @@
 #
 #   merged   projects\ (transcripts) and claude-code-sessions\ (only the
 #            local_*.json index entries and deleted_* tombstones), merged from
-#            every machine. push and pull both sync these.
+#            every machine. archive writes these; restore copies them back.
 #   archive  machines\<name>\ -- everything else worth keeping from this machine
 #            (per-machine index state, file history, plans, tasks, side-session
-#            notes, Cowork sessions, CLAUDE.md, ...). push only; never pulled,
+#            notes, Cowork sessions, CLAUDE.md, ...). Written by archive; never restored,
 #            since one machine's copy would overwrite the other's.
 #
 # Credentials and keys never leave this machine. Copies are additive and
-# newest-wins (/XO): nothing is ever deleted from either side. When a push
-# replaces a file in the central shared folder, the old copy is kept under
+# newest-wins (/XO): nothing is ever deleted from either side. When an archive
+# run replaces a file in the central shared folder, the old copy is kept under
 # machines\<name>\versions\<timestamp>\ (transcripts excepted: they only grow).
 
 param(
-    [ValidateSet('push', 'pull')]
-    [string]$Mode = 'push',
+    [ValidateSet('archive', 'restore')]
+    [string]$Mode = 'archive',
     [string]$Central
 )
 
@@ -116,13 +116,13 @@ function Sync-Tree($label, $src, $dst, [string[]]$files = @(), [string[]]$opts =
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed (exit $LASTEXITCODE): $src -> $dst" }
 }
 
-if ($Mode -eq 'push') {
-    Write-Host "Pushing local sessions -> $Central"
+if ($Mode -eq 'archive') {
+    Write-Host "Archiving merged sessions -> $Central"
     Sync-Tree 'transcripts (.claude\projects)' $projects "$Central\projects"
     Sync-Tree 'session index (claude-code-sessions)' $sessions "$Central\claude-code-sessions" $indexMerged @() 'claude-code-sessions'
 
     Write-Host ""
-    Write-Host "Archiving this machine -> $archive"
+    Write-Host "Archiving this machine's own data -> $archive"
     Sync-Tree 'per-machine index state' $sessions "$archive\claude-code-sessions" @() (@('/XF') + $indexMerged) 'machine-claude-code-sessions'
     # from .claude: what the CLI keeps per session, plus your own instructions
     foreach ($d in 'file-history', 'plans', 'tasks', 'skills', 'agents', 'commands', 'output-styles') {
@@ -139,7 +139,7 @@ if ($Mode -eq 'push') {
         Write-Host "Replaced files kept in $versions"
     }
 } else {
-    Write-Host "Pulling $Central -> local sessions"
+    Write-Host "Restoring merged sessions $Central -> this machine"
     Write-Host "(quit Claude for Windows first, including the system tray icon)"
     Sync-Tree 'transcripts (.claude\projects)' "$Central\projects" $projects
     Sync-Tree 'session index (claude-code-sessions)' "$Central\claude-code-sessions" $sessions $indexMerged
