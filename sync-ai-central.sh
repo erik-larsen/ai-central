@@ -96,8 +96,8 @@ fi
 mkdir -p "$CENTRAL/projects" "$CENTRAL/claude-code-sessions"
 
 # rsync -v prints each file it copies, but also every directory it traverses
-# (lines ending in "/") and its own header/footer lines — filter to just the
-# actual files so the output is real progress, and count them.
+# (lines ending in "/") and its own header/footer lines — show just the actual
+# files as they're copied, numbered, and count them.
 sync_tree() {
     local label="$1" src="$2" dst="$3"
     shift 3
@@ -105,21 +105,22 @@ sync_tree() {
     echo "==> $label"
     echo "    $src  ->  $dst"
     mkdir -p "$dst"
-    local out files rc=0
-    out="$(rsync -auv "$@" "$src/" "$dst/")" || rc=$?
+    local line count=0 rc=0 start=$SECONDS
+    while IFS= read -r line; do
+        case "$line" in
+            '__rsync_exit '*) rc="${line#__rsync_exit }" ;;
+            ''|*/|.|'Transfer starting'*|sending*|building*|'sent '*|'total size'*) ;;
+            *) count=$((count + 1)); echo "    [$count] $line" ;;
+        esac
+    done < <(rsync -auv "$@" "$src/" "$dst/" || echo "__rsync_exit $?")
     # 24 = a file vanished mid-copy (the app tidying up); anything else is a real
     # failure and must not be reported as "up to date"
     if [ "$rc" -ne 0 ] && [ "$rc" -ne 24 ]; then
         echo "error: rsync failed (exit $rc): $src -> $dst" >&2
         exit 1
     fi
-    files="$(echo "$out" \
-        | grep -v -e '^$' -e '/$' -e '^\./\{0,1\}$' \
-                  -e '^Transfer starting' -e '^sending' -e '^building' \
-                  -e '^sent ' -e '^total size' || true)"
-    if [ -n "$files" ]; then
-        echo "$files" | sed 's/^/    /'
-        echo "    -- $(echo "$files" | wc -l | tr -d ' ') file(s) copied"
+    if [ "$count" -gt 0 ]; then
+        echo "    -- $count file(s) copied in $((SECONDS - start))s"
     else
         echo "    -- up to date, nothing to copy"
     fi
